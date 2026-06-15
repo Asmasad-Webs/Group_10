@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Round Robin Scheduler</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Segoe UI',sans-serif;
+}
+
+body{
+    background:#0f172a;
+    color:white;
+    padding:30px;
+}
+
+.container{
+    max-width:1100px;
+    margin:auto;
+}
+
+h1{
+    text-align:center;
+    color:#38bdf8;
+    margin-bottom:20px;
+}
+
+h3{
+    text-align:center;
+    margin:25px 0;
+}
+
+/* INPUT AREA */
+.card{
+    background:#1e293b;
+    padding:20px;
+    border-radius:12px;
+    margin-bottom:20px;
+}
+
+input{
+    padding:10px;
+    margin:5px;
+    border:none;
+    border-radius:8px;
+    background:#334155;
+    color:white;
+}
+
+button{
+    padding:10px 15px;
+    border:none;
+    border-radius:8px;
+    background:#0ea5e9;
+    color:white;
+    cursor:pointer;
+    font-weight:bold;
+}
+
+button:hover{
+    background:#0284c7;
+}
+
+/* TABLE */
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-top:10px;
+    background:#1e293b;
+    border-radius:10px;
+    overflow:hidden;
+}
+
+th,td{
+    border:1px solid #334155;
+    text-align:center;
+    padding:10px;
+}
+
+th{
+    background:#0ea5e9;
+}
+
+/* GANTT */
+.gantt{
+    overflow-x:auto;
+    margin-top:20px;
+}
+
+.gantt-table{
+    width:auto;
+    margin:auto;
+}
+
+.gantt-table td{
+    min-width:45px;
+    height:45px;
+}
+
+/* TIMELINE FIXED */
+.timeline td{
+    border:none !important;
+    height:40px;
+    position:relative;
+    overflow:visible;
+}
+
+.time-label{
+    position:absolute;
+    top:18px; /* FIXED POSITION */
+    left:-6px;
+    font-size:13px;
+    font-weight:bold;
+    color:#38bdf8;
+}
+
+/* PROCESS LABEL */
+.process{
+    background:#334155;
+    font-weight:bold;
+    width:80px;
+}
+
+/* EXECUTION BLOCK */
+.exec{
+    background:#22c55e;
+    width:100%;
+    height:100%;
+    border-radius:4px;
+}
+
+/* SUMMARY */
+.summary{
+    margin-top:20px;
+    text-align:center;
+    color:#cbd5e1;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Round Robin Scheduling Visualizer</h1>
+
+<div class="card">
+
+<label>Quantum:</label>
+<input type="number" id="quantum" value="1">
+
+<label>Process:</label>
+<input type="text" id="pname">
+
+<label>Arrival:</label>
+<input type="number" id="arrival">
+
+<label>Service:</label>
+<input type="number" id="service">
+
+<button onclick="addProcess()">Add Process</button>
+
+</div>
+
+<h3>Process List</h3>
+
+<table id="processTable">
+<tr>
+<th>Process</th>
+<th>Arrival</th>
+<th>Service</th>
+</tr>
+</table>
+
+<div style="text-align:center; margin-top:15px;">
+<button onclick="runRR()">Generate Schedule</button>
+</div>
+
+<h3>Execution Matrix</h3>
+
+<div class="gantt" id="result"></div>
+
+</div>
+
+<script>
+
+let processes=[];
+
+function addProcess(){
+
+    let pname=document.getElementById("pname").value;
+    let arrival=parseInt(document.getElementById("arrival").value);
+    let service=parseInt(document.getElementById("service").value);
+
+    if(!pname || isNaN(arrival) || isNaN(service)){
+        alert("Fill all fields");
+        return;
+    }
+
+    processes.push({
+        name:pname,
+        arrival,
+        service,
+        remaining:service
+    });
+
+    let table=document.getElementById("processTable");
+    let row=table.insertRow();
+
+    row.insertCell(0).innerText=pname;
+    row.insertCell(1).innerText=arrival;
+    row.insertCell(2).innerText=service;
+
+    document.getElementById("pname").value="";
+    document.getElementById("arrival").value="";
+    document.getElementById("service").value="";
+}
+
+function runRR(){
+
+    let quantum=parseInt(document.getElementById("quantum").value);
+
+    let queue=[];
+    let schedule=[];
+    let time=0;
+
+    let procs=JSON.parse(JSON.stringify(processes));
+
+    while(procs.some(p=>p.remaining>0)){
+
+        procs.forEach(p=>{
+            if(p.arrival===time && p.remaining>0 && !queue.includes(p)){
+                queue.push(p);
+            }
+        });
+
+        if(queue.length===0){
+            schedule.push("idle");
+            time++;
+            continue;
+        }
+
+        let current=queue.shift();
+        let runTime=Math.min(quantum,current.remaining);
+
+        for(let i=0;i<runTime;i++){
+
+            schedule.push(current.name);
+            time++;
+            current.remaining--;
+
+            procs.forEach(p=>{
+                if(p.arrival===time && p.remaining>0 && !queue.includes(p)){
+                    queue.push(p);
+                }
+            });
+
+            if(current.remaining===0) break;
+        }
+
+        if(current.remaining>0){
+            queue.push(current);
+        }
+    }
+
+    draw(schedule);
+}
+
+function draw(schedule){
+
+    let html="<table class='gantt-table'>";
+
+    // TIMELINE
+    html+="<tr class='timeline'><td></td>";
+
+    html+=`
+    <td style="position:relative;">
+        <div class="time-label">0</div>
+    </td>`;
+
+    for(let i=0;i<schedule.length;i++){
+        html+=`
+        <td style="position:relative;">
+            <div class="time-label">${i+1}</div>
+        </td>`;
+    }
+
+    html+="</tr>";
+
+    // PROCESS ROWS
+    processes.forEach(p=>{
+
+        html+=`<tr><td class="process">${p.name}</td>`;
+
+        for(let i=0;i<schedule.length;i++){
+
+            if(schedule[i]===p.name){
+                html+=`<td><div class="exec"></div></td>`;
+            }else{
+                html+="<td></td>";
+            }
+
+        }
+
+        html+="</tr>";
+    });
+
+    html+="</table>";
+
+    document.getElementById("result").innerHTML=html;
+}
+
+</script>
+
+</body>
+</html>
